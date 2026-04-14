@@ -1,0 +1,2 @@
+backbone_id	source_type	source	label	note
+default_k12	genbank	K12_MG1655.gbk	Ecoli_K12	Default backbone without Stx phage
