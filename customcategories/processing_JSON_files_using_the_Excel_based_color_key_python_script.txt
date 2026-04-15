@@ -1,0 +1,62 @@
+import json
+import pandas as pd
+
+# File paths
+json_file_path = 'path_to/your_json_file.json'  # Replace with your JSON file path
+color_key_file_path = 'path_to/color_key_newest(v2).xlsx'  # Replace with your Excel file path
+output_file_path = 'path_to/final_output.xlsx'  # Replace with your desired output file path
+
+# Step 1: Parse the JSON file
+with open(json_file_path, 'r') as file:
+    json_data = json.load(file)
+
+# Convert JSON data to a DataFrame and sort by index
+parsed_df = pd.DataFrame(json_data).sort_values(by="index")
+
+# Extract the relevant part of the "name" column
+parsed_df['relevant_name'] = parsed_df['name'].apply(
+    lambda x: x.split(';')[1].strip().lower() if ';' in x else None
+)
+
+# Step 2: Load the color key Excel file and normalize column names
+color_key_df = pd.read_excel(color_key_file_path)
+color_key_df.columns = color_key_df.columns.str.strip()
+
+# Step 3: Create a matching key for both datasets and ensure consistent formatting
+parsed_df['match_key'] = (
+    parsed_df['phage_bac_class'].str.strip().str.lower() + '_' +
+    parsed_df['type'].str.strip().str.lower() + '_' +
+    parsed_df['relevant_name'].str.strip().str.lower()
+)
+color_key_df['match_key'] = (
+    color_key_df['phage_bac_class'].str.strip().str.lower() + '_' +
+    color_key_df['type'].str.strip().str.lower() + '_' +
+    color_key_df['name'].str.strip().str.lower()
+)
+# Step 4: Match using the combined key and merge data
+merged_df = parsed_df.merge(
+    color_key_df[['match_key', 'hex color', 'category', 'subcategory']],
+    how='left',
+    on='match_key'
+)
+
+# Step 5: Ensure all indexes are retained and handle unmatched rows
+unmatched_rows = parsed_df[~parsed_df['match_key'].isin(color_key_df['match_key'])]
+unmatched_rows['category'] = 'N/A'
+unmatched_rows['subcategory'] = 'N/A'
+unmatched_rows['hex color'] = 'N/A'
+
+# Combine matched and unmatched rows
+final_combined_df = pd.concat([merged_df, unmatched_rows], ignore_index=True).sort_values(by='index')
+
+# Step 6: Reorder columns with "category", "subcategory", and "hex color" at the end
+column_order = (
+    [col for col in final_combined_df.columns if col not in ['category', 'subcategory', 'hex color']] +
+    ['category', 'subcategory', 'hex color']
+)
+final_combined_df = final_combined_df[column_order]
+
+# Step 7: Save the final DataFrame to an Excel file
+final_combined_df.to_excel(output_file_path, index=False)
+
+print(f"Final output saved to: {output_file_path}")

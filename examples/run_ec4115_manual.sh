@@ -1,0 +1,11 @@
+python stxit.py \
+  --query EC4115.gbk \
+  --db-fasta config/comprehensive_stx_typing.fasta \
+  --phastest-tsv phastest_regions.tsv \
+  --trnascan-tsv trnascan.tsv \
+  --known-sites config/known_insertion_sites.tsv \
+  --backbone-comparison-genbank K12_MG1655.gbk \
+  --compare-backbone K12_MG1655 \
+  --build-variant-trees \
+  --plot-closed-genome-maps \
+  --outdir results_ec4115

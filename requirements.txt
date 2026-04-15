@@ -1,4 +1,4 @@
-biopython
-pandas
-openpyxl
-matplotlib
+biopython>=1.80
+pandas>=2.0
+matplotlib>=3.8
+requests>=2.31
