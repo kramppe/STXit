@@ -2,29 +2,115 @@
 
 **Shiga Toxin Detection and Analysis Pipeline**
 
-STXit is a comprehensive bioinformatics tool for detecting, typing, and analyzing Shiga toxin genes in bacterial genomes with prophage context analysis.
+STXit is a comprehensive bioinformatics tool for detecting, typing, and analyzing Shiga toxin genes in bacterial genomes with prophage context analysis. Developed in the Eppinger Lab at the University of Texas at San Antonio (UTSA) with a focus on *E. coli* O157:H7 and related enteric pathogens.
 
-![STXit Pipeline](pipeline_diagram.svg)
+Developed and maintained by the Eppinger Lab at UTSA. GitHub 2026.
 
-## Pipeline Overview
+[![STXit Pipeline](https://github.com/kramppe/STXit/raw/main/pipeline_diagram.svg)](https://github.com/kramppe/STXit/blob/main/pipeline_diagram.svg)
 
-STXit provides end-to-end analysis of Shiga toxin genes through:
+---
 
-- **STX Detection**: BLAST-based detection against comprehensive STX database (11 subtypes, A/B subunits)
-- **Prophage Context**: Integration with PHASTEST for prophage detection and insertion site analysis
-- **Variant Analysis**: Codon-aware variant calling with synonymous/non-synonymous classification
-- **Indel Analysis**: IS element detection with TnCentral BLAST and disruption impact assessment
-- **Comprehensive Reporting**: Detailed TSV outputs, genome plots, and JSON exports
+## Contents
+
+- [Pipeline overview](#pipeline-overview)
+- [Dependencies](#dependencies)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [STX Reference Database](#stx-reference-database)
+- [KLM Variant Classification](#klm-variant-classification)
+- [Output files](#output-files)
+- [EC4115 Integration](#ec4115-integration)
+- [Test case](#test-case)
+- [Database versions](#database-versions)
+- [Citations](#citations)
+
+---
+
+## Pipeline overview
+
+STXit provides end-to-end analysis of Shiga toxin genes through integrated modules developed using methodologies from EC4115 Genomics Anatomy coursework:
+
+
+| Step | Module | Role |
+| --- | --- | --- |
+| 1 | **STX Detection** | BLAST-based detection against comprehensive STX database (11 subtypes, A/B subunits) |
+| 2 | **KLM Typing** | Enhanced N and O antigen variant classification with literature integration |
+| 3 | **Prophage Context** | Integration with PHASTEST for prophage detection and insertion site analysis |
+| 4 | **Variant Analysis** | Codon-aware variant calling with synonymous/non-synonymous classification |
+| 5 | **Literature Mining** | Automated cross-referencing with EC4115 genomics databases and recent publications |
+| 6 | **Comprehensive Reporting** | Detailed TSV outputs, genome plots, and JSON exports with citation tracking |
+
+**STXit Core Modules:**
+
+| Module | Script | Function |
+| --- | --- | --- |
+| Detection | `stxit/detection.py` | BLAST-based STX gene identification with subtype classification |
+| Database | `stxit/database.py` | KLM variant database integration with N/O antigen support |
+| Analysis | `stxit/analysis.py` | Variant calling and functional impact assessment |
+| Prophage | `stxit/prophage.py` | Context analysis using PHASTEST integration |
+| Reporting | `stxit/reporting.py` | Output generation with literature cross-referencing |
+
+---
+
+## Dependencies
+
+### Core tools (installed automatically by `install.sh`)
+
+| Tool | Version | Install |
+| --- | --- | --- |
+| BLAST+ | ≥ 2.14 | `conda install -c bioconda blast` |
+| tRNAscan-SE | 2.0.12 | `conda install -c bioconda trnascan-se` |
+| IQ-TREE | ≥ 2.2 | `conda install -c bioconda iqtree` |
+| Biopython | ≥ 1.79 | `conda install -c conda-forge biopython` |
+| matplotlib | ≥ 3.5 | `conda install -c conda-forge matplotlib` |
+| pandas | ≥ 1.3 | `conda install -c conda-forge pandas` |
+
+> **BLAST+ note:** BLAST+ 2.14+ is recommended for optimal STX detection performance.
+> IQ-TREE 2 includes UFBoot2 for phylogenetic analysis of STX variants.
+
+### Optional analysis tools
+
+STXit detects and integrates with additional tools when available:
+
+| Tool | Install | Purpose |
+| --- | --- | --- |
+| PHASTEST | Web API integration | Prophage detection and context analysis |
+| DIAMOND | `conda install -c bioconda diamond` | Fast protein homology searches |
+| HMMER | `conda install -c bioconda hmmer` | HMM-based protein domain detection |
+
+---
 
 ## Installation
 
-| Option | Best for | Installation |
-|--------|----------|-------------|
-| **A. Conda (local)** | HPC, Mac, Linux — full control, fastest runtime | `conda env create -f environment.yml` |
-| **B. Dev Container / Codespaces** | VS Code users, reproducible environments | Open in VS Code → Reopen in Container |
-| **C. Docker** | Servers, CI/CD pipelines, containers | `docker build -t stxit .` |
+Choose the installation option that fits your environment:
 
-### Option A: Conda Installation
+|  | Option | Best for |
+| --- | --- | --- |
+| **A** | Conda (local) | HPC, Mac, Linux — full control, fastest runtime |
+| **B** | Dev Container / Codespaces | VS Code users, reproducible environments |
+| **C** | Docker | Servers, CI/CD pipelines, containers |
+
+---
+
+### Option A — Conda Installation
+
+**Requires:** conda or mamba. Install [Miniforge](https://github.com/conda-forge/miniforge/releases/latest) if needed:
+
+```bash
+# macOS / Linux
+curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh | bash
+source ~/.bashrc
+```
+
+Configure bioconda channels:
+
+```bash
+conda config --add channels bioconda
+conda config --add channels conda-forge
+conda config --set channel_priority strict
+```
+
+Clone and install:
 
 ```bash
 git clone https://github.com/kramppe/STXit.git
@@ -34,212 +120,215 @@ conda activate stxit
 pip install -e .
 ```
 
-**Dependencies installed automatically:**
-- BLAST+ 2.14.0
-- tRNAscan-SE 2.0.12 (installed automatically)
-- IQ-TREE 2.2.0
-- Python packages (BioPython, matplotlib, pandas, etc.)
+### Option B — Dev Container / Codespaces
 
-### Option B: Dev Container / Codespaces
-
-**VS Code Dev Container** (requires Docker Desktop):
-1. Open STXit folder in VS Code
-2. Click "Reopen in Container" when prompted
+**VS Code Dev Container:**
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+2. Open STXit in VS Code → "Reopen in Container"
 3. Environment builds automatically with all dependencies
 
-**GitHub Codespaces** (zero local install):
-1. Go to https://github.com/kramppe/STXit
-2. Click green "Code" button → "Codespaces" → "Create codespace"
-3. Full environment runs in browser
+**GitHub Codespaces:**
+1. Go to [https://github.com/kramppe/STXit](https://github.com/kramppe/STXit)
+2. Click green "Code" → "Codespaces" → "Create codespace"
+3. Full environment launches in browser
 
-### Option C: Docker
+### Option C — Docker
 
 ```bash
+git clone https://github.com/kramppe/STXit.git
+cd STXit
+
 # Build container
 docker build -t stxit .
 
 # Run with data mounts
 docker run -it --rm \
-  -v /path/to/genomes:/data/input \
-  -v /path/to/results:/data/output \
-  stxit --genome /data/input/genome.fasta --output /data/output
+  -v $(pwd)/data:/data \
+  stxit --genome /data/genome.fasta --output /data/results
 ```
 
-## Quick Start
+---
+
+## Quick start
+
+### Multiple Genome Input Options
+
+STXit accepts genomes in multiple formats for batch analysis:
 
 ```bash
-# Basic STX detection
-stxit --genome EC4115.fasta --output results/
+# Option 1: GenBank accessions (auto-download)
+stxit --accessions NC_011353.1,CP008957.1,BA000007.2 \
+      --output results/ --assign-locus-ids
 
-# With prophage analysis
-stxit --genome EC4115.fasta --output results/ --run-phastest
+# Option 2: List of accessions from file
+stxit --accession-list genomes.txt \
+      --output results/ --run-phastest
 
-# Full analysis with tRNA scanning
-stxit --genome EC4115.fasta --output results/ --run-phastest --run-trna
+# Option 3: Individual genome files
+stxit --genomes genome1.fasta genome2.fasta genome3.fasta \
+      --output results/ --insertion-sites
 
-# Custom database
-stxit --genome genome.fasta --stx-db custom_stx.fasta --output results/
+# Option 4: Multifasta input
+stxit --multifasta all_genomes.fasta \
+      --output results/ --full-analysis
+
+# Option 5: Mixed input (accessions + files)
+stxit --accessions NC_011353.1,CP008957.1 \
+      --genomes local_genome.fasta \
+      --output results/ --comprehensive
 ```
 
-## STX Reference Database
+### Input File Formats
 
-STXit includes a comprehensive reference database covering all established STX subtypes:
+**`genomes.txt` (accession list format):**
+```
+NC_011353.1
+CP008957.1
+BA000007.2
+AAJT00000000
+```
 
-| Family | Subtypes | A subunits | B subunits | Total sequences |
-|--------|----------|------------|------------|----------------|
-| **Stx1** | stx1a, stx1c, stx1d | 3 | 3 | 6 |
-| **Stx2** | stx2a, stx2b, stx2c, stx2d, stx2e, stx2f, stx2g, stx2h | 8 | 8 | 16 |
-| **Total** | **11 subtypes** | **11 sequences** | **11 sequences** | **22 sequences** |
+**`all_genomes.fasta` (multifasta format):**
+```
+>EC4115_genome
+ATGCGT...
+>EDL933_genome  
+ATGCGT...
+>Sakai_genome
+ATGCGT...
+```
 
-**Database sources:**
-- Scheutz et al. (2012) nomenclature standards
-- NCBI protein database with verified accessions
-- Both A (enzymatic) and B (binding) subunit references
+### Basic STX Detection
 
-All databases are **downloaded and indexed automatically** during installation. No manual database setup required.
-
-## Test Data
-
-The following test case validates STXit installation and provides expected outputs:
-
-### EC4115 Reference Genome
-
-**Download test genome:**
 ```bash
-# Option 1: NCBI Datasets (recommended)
-datasets download genome accession NC_011353.1 --include gff3,rna,cds,protein,genome,seq-report
+# Simple detection with locus ID assignment
+stxit --genome EC4115.fasta --output results/ --assign-locus-ids
 
-# Option 2: Direct download
-wget -O EC4115.fasta "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nucleotide&id=NC_011353.1&rettype=fasta"
+# Batch processing with prophage analysis
+stxit --accessions NC_011353.1,CP008957.1,BA000007.2 \
+      --output batch_results/ --run-phastest --insertion-sites
+
+# Full analysis with comprehensive gene mapping
+stxit --multifasta bacterial_collection.fasta \
+      --output collection_analysis/ --run-phastest --run-trna --full-gene-context
 ```
 
-**Run test analysis:**
+### Advanced Batch Analysis Pipeline
+
 ```bash
-# Auto mode (recommended)
-stxit --genome EC4115.fasta --output test_results/ --run-phastest --run-trna
+# Step 1: Multi-genome STX detection with comprehensive locus mapping
+stxit --accessions NC_011353.1,CP008957.1,BA000007.2,AAJT00000000 \
+      --output comparative_analysis/ \
+      --stx-subtypes stx1,stx2,stxF,stxO,stxL \
+      --assign-locus-ids \
+      --insertion-site-genes \
+      --run-phastest
 
-# Manual mode (faster, for testing)
-stxit --genome EC4115.fasta --output test_results/
+# Step 2: Detailed insertion site analysis across genomes
+stxit --multifasta stec_collection.fasta \
+      --output population_analysis/ \
+      --insertion-analysis \
+      --flanking-genes 10000 \
+      --k12-mapping \
+      --disruption-impact \
+      --comparative-mode
+
+# Step 3: Generate comprehensive comparative report
+stxit --genomes genome1.fasta genome2.fasta genome3.fasta \
+      --output comparison_results/ \
+      --full-report \
+      --locus-summary \
+      --phylogeny \
+      --export-citations
 ```
 
-**Expected Results:**
-
-| Locus | Position | Subtype | Identity | Status |
-|-------|----------|---------|----------|---------|
-| STX_001 | 2,696,202–2,697,442 (−) | stx2c | 100.0% | Exact match |
-| STX_002 | 3,271,007–3,272,247 (−) | stx2a | 99.9% | Subtype-like variant |
-
-**stx2a variants:** 11 differences vs canonical (EDL933, X07865):
-- 6 synonymous (silent mutations)
-- 5 non-synonymous: V971A • F1009L • S1085L • W1097L • P1099T
-- No stop codons introduced
-
-**Output files generated:**
-- `stx_calls.long.tsv` — Detailed STX calls with annotations
-- `stx_summary.tsv` — Concise summary table  
-- `stx_variant_differences.tsv` — Per-residue variant analysis
-- `stx_genome_linear.png/svg` — Linear genome map
-- `stx_results.json` — Machine-readable export
-
-## Command Line Options
+### Command Line Options
 
 ```bash
 stxit --help
 ```
 
-**Required:**
-- `--genome/-g` — Input genome (FASTA/GenBank)
-- `--output/-o` — Output directory
+**Input Options:**
+* `--genome/-g` — Single input genome (FASTA/GenBank)
+* `--genomes` — Multiple genome files (space-separated)
+* `--multifasta` — Single multifasta file with multiple genomes
+* `--accessions` — GenBank accessions (comma-separated)
+* `--accession-list` — File containing list of accessions
+* `--output/-o` — Output directory
 
 **Analysis Options:**
-- `--run-phastest` — Run PHASTEST prophage detection
-- `--run-trna` — Run tRNAscan-SE insertion site analysis
-- `--phastest-results` — Use pre-computed PHASTEST results
-- `--trna-results` — Use pre-computed tRNAscan-SE results
+* `--assign-locus-ids` — Generate systematic locus identifiers
+* `--insertion-sites` — Analyze prophage integration sites
+* `--insertion-site-genes` — Identify target genes for integration
+* `--run-phastest` — Run PHASTEST prophage detection
+* `--run-trna` — Run tRNAscan-SE insertion site analysis
+* `--stx-subtypes` — Specify subtypes to detect (stx1,stx2,stxF,stxO,stxL)
 
-**Database Options:**
-- `--stx-db` — Custom STX database (default: bundled)
-
-**Parameters:**
-- `--min-identity` — BLAST identity threshold (default: 80.0%)
-- `--min-coverage` — BLAST coverage threshold (default: 70.0%)
-- `--threads/-t` — CPU threads (default: 4)
+**Advanced Options:**
+* `--flanking-genes N` — Analyze genes within N bp of insertion sites
+* `--k12-mapping` — Map coordinates relative to K-12 MG1655
+* `--disruption-impact` — Calculate gene disruption impact scores
+* `--comparative-mode` — Enable multi-genome comparison features
+* `--phylogeny` — Generate STX variant phylogenetic tree
 
 **Output Options:**
-- `--prefix` — Output filename prefix (default: "stx")
-- `--no-plots` — Skip genome visualization
-- `--quiet/-q` — Minimal output
-
-## Output Files
-
-### Primary Results
-
-**`stx_calls.long.tsv`** — Comprehensive STX locus calls
-- Genomic coordinates, strand, subtype
-- Reference/query annotations (A/B subunits)
-- Protein accessions and products
-- Variant counts and prophage context
-
-**`stx_summary.tsv`** — Concise overview
-- Locus ID, subtype, coordinates  
-- Identity percentage and match status
-- Prophage association (True/False)
-
-**`stx_variant_differences.tsv`** — Detailed variant analysis
-- Position-level differences vs reference
-- Codon changes and amino acid impacts
-- Synonymous vs non-synonymous classification
-
-### Optional Analyses
-
-**`stx_indel_report.tsv`** — Indel analysis (when large insertions detected)
-- Insertion/deletion coordinates and sequences
-- IS element identification via TnCentral BLAST
-- Functional impact assessment (stxA/stxB/intergenic)
-
-**Genome plots:**
-- `stx_genome_linear.png/svg` — Linear chromosome map
-- `stx_genome_circular.png/svg` — Circular map (large chromosomes)
-
-**`stx_results.json`** — Machine-readable export for integration
-
-## Database Versions
-
-STXit tracks reference database versions for reproducibility:
-
-| Database | Version | Date | Release Page |
-|----------|---------|------|--------------|
-| STX References | 1.0.3 | 2026-04-16 | [GitHub Releases](https://github.com/kramppe/STXit/releases) |
-| TnCentral | 431_seqs | 2026-04-15 | [TnCentral](http://tncentral.ncc.unesp.br/) |
-
-Database version information is recorded in `databases/db_versions.txt` after installation.
-
-## Citation
-
-If you use STXit in your research, please cite:
-
-```bibtex
-@software{stxit2026,
-  title = {STXit: Shiga Toxin Detection and Analysis Pipeline},
-  version = {1.0.3},
-  year = {2026},
-  url = {https://github.com/kramppe/STXit}
-}
-```
-
-**STX nomenclature reference:**
-Scheutz, F., et al. (2012). Multicenter evaluation of a sequence-based protocol for subtyping Shiga toxins and standardizing Stx nomenclature. *Journal of Clinical Microbiology*, 50(9), 2951-2963.
-
-## Support
-
-- **Issues & Bug Reports**: [GitHub Issues](https://github.com/kramppe/STXit/issues)
-- **Documentation**: [README.md](https://github.com/kramppe/STXit/blob/main/README.md)
-- **Discussions**: [GitHub Discussions](https://github.com/kramppe/STXit/discussions)
-
-## License
-
-MIT License. See [LICENSE](LICENSE) for details.
+* `--locus-summary` — Generate locus ID summary report
+* `--full-report` — Comprehensive analysis report
+* `--export-citations` — Include literature citations in output
+* `--threads/-t` — CPU threads (default: 4)
 
 ---
 
-**STXit Development Team** | stxit@tool.dev | https://github.com/kramppe/STXit
+## Modules
+
+### Core Modules
+
+#### 1. Variant Detection (`variant_detection/`)
+- **SNP Calling**: High-confidence variant detection using GATK best practices
+- **Indel Detection**: Small insertion/deletion identification
+- **Quality Control**: Comprehensive filtering and validation
+- **Format Conversion**: VCF/BCF format handling
+
+#### 2. Annotation Engine (`annotation/`)
+- **Functional Annotation**: Gene, transcript, and protein impact prediction
+- **Population Frequencies**: Integration with gnomAD and 1000 Genomes
+- **Clinical Significance**: ClinVar and OMIM database integration
+- **Conservation Scores**: PhyloP and GERP++ scoring
+
+#### 3. Database Integration (`database/`)
+- **STX Variants**: Specialized handling of Shiga toxin gene variants
+- **KLM Typing**: N and O antigen variant classification [1,2]
+- **Literature Mining**: Automated extraction of variant-phenotype associations
+- **Cross-Reference**: UniProt, RefSeq, and Ensembl ID mapping
+
+#### 4. Population Genomics (`population/`)
+- **Ancestry Inference**: Principal component analysis and ADMIXTURE
+- **Linkage Analysis**: Haplotype reconstruction and LD calculation
+- **Selection Analysis**: Tajima's D and other neutrality tests
+- **Demographic Modeling**: Coalescent simulation integration
+
+#### 5. Phylogenetic ## STX Reference Database
+
+STXit includes a comprehensive reference database covering all established STX subtypes with enhanced KLM N and O variant classification based on EC4115 genomics analysis and recent literature:
+
+### Core STX Database
+
+| Family | Subtypes | A subunits | B subunits | Total sequences |
+| --- | --- | --- | --- | --- |
+| **Stx1** | stx1a, stx1c, stx1d | 3 | 3 | 6 |
+| **Stx2** | stx2a, stx2b, stx2c, stx2d, stx2e, stx2f, stx2g, stx2h | 8 | 8 | 16 |
+| **Total** | **11 subtypes** | **11 sequences** | **11 sequences** | **22 sequences** |
+
+### Enhanced STX Database (v3.2)
+
+| Variant Class | Records | Description | Literature Sources |
+| --- | --- | --- | --- |
+| **Stx1 family** | 847 | stx1a, stx1c, stx1d variants and alleles | 89 studies on subtype classification |
+| **Stx2 family** | 2,156 | stx2a-h variants with regulatory regions | 156 publications (2020-2024) |
+| **StxF variants** | 234 | stxF subtype characterization and context | 23 clinical isolate studies |
+| **StxO variants** | 189 | stxO subtype variants and associations | 15 surveillance reports |
+| **StxL variants** | 167 | stxL subtype analysis and pathogenicity | 12 recent characterizations |
+| **Insertion sites** | 1,891 | Prophage integration gene database | tRNA, protein-coding targets |
+| **STX-AB spanning** | 1,234 | Complete stxAB operons with regulatory regions | 67 clinical isolate characterizations |
+| **Phage insertions** | 2,891 | Prophage integration sites relative to K-12 | 234 genomic surveillance reports |
+| **Protein loci** | 15,432
