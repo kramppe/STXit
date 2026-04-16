@@ -1,19 +1,40 @@
-name: stxit_v1
+name: stxit
 channels:
   - bioconda
   - conda-forge
   - defaults
 dependencies:
-  - python=3.10
-  - blast
-  - iqtree
-  - fasttree
-  - entrez-direct
-  - ncbi-datasets-cli
-  - trnascan-se
+  # Core Python
+  - python=3.9
   - pip
+  
+  # Bioinformatics tools
+  - blast=2.14.0
+  - trnascan-se=2.0.12
+  - mummer4=4.0.0
+  - iqtree=2.2.0
+  
+  # Python packages
+  - biopython=1.81
+  - matplotlib=3.7.1
+  - seaborn=0.12.2
+  - pandas=2.0.3
+  - numpy=1.24.3
+  - scipy=1.11.1
+  - requests=2.31.0
+  - pyyaml=6.0
+  
+  # Development tools
+  - pytest=7.4.0
+  - black=23.7.0
+  - flake8=6.0.0
+  
+  # System tools
+  - wget
+  - curl
+  - unzip
+  
+  # Pip dependencies (if needed)
   - pip:
-      - biopython
-      - pandas
-      - openpyxl
-      - matplotlib
+    - dataclasses-json==0.5.9
+    - click==8.1.6

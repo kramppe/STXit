@@ -1,65 +1,187 @@
-from __future__ import annotations
-from dataclasses import dataclass
+"""
+STX Database Module
+FASTA database loader with metadata and citations
+"""
+
+import os
+import csv
 from pathlib import Path
 from typing import Dict, Optional
-import pandas as pd
 from Bio import SeqIO
 
-@dataclass
-class StxReference:
-    reference_id: str
-    accession: str
-    stx_family: str
-    stx_subtype: str
-    variant_name: str
-    strain: str
-    citation_key: str
-    length: int
-
-@dataclass
-class KnownSite:
-    site_name: str
-    feature_type: str
-    match_gene: str
-    match_locus_tag: str
-    backbone_accession: str
-    backbone_label: str
-    category: str
-    note: str
-
-@dataclass
-class StxDatabase:
-    fasta_path: Path
-    references: Dict[str, StxReference]
-    metadata: pd.DataFrame
-    citations: Optional[pd.DataFrame] = None
-
-def _parse_header(record_id: str, seq_len: int) -> StxReference:
-    parts = record_id.split("|")
-    parts += [""] * (7 - len(parts))
-    return StxReference(parts[0] or record_id, parts[1] or "NA", parts[2] or "", parts[3] or "", parts[4] or "", parts[5] or "", parts[6] or "", seq_len)
-
-def load_stx_database(fasta_path: Path, metadata_path: Optional[Path] = None, citations_path: Optional[Path] = None) -> StxDatabase:
-    refs = {}
-    for rec in SeqIO.parse(str(fasta_path), "fasta"):
-        parsed = _parse_header(rec.id, len(rec.seq))
-        refs[parsed.reference_id] = parsed
-    md_rows = [{"reference_id": r.reference_id, "accession": r.accession, "stx_family": r.stx_family, "stx_subtype": r.stx_subtype, "variant_name": r.variant_name, "strain": r.strain, "length": r.length, "citation_key": r.citation_key} for r in refs.values()]
-    metadata = pd.DataFrame(md_rows)
-    if metadata_path and metadata_path.exists():
-        external = pd.read_csv(metadata_path, sep="\t", dtype=str).fillna("")
-        metadata = external.merge(metadata, on="reference_id", how="outer", suffixes=("", "_fasta"))
-        for col in ["accession", "stx_family", "stx_subtype", "variant_name", "strain", "length", "citation_key"]:
-            if f"{col}_fasta" in metadata.columns:
-                metadata[col] = metadata[col].replace("", pd.NA).fillna(metadata[f"{col}_fasta"])
-        metadata = metadata[[c for c in metadata.columns if not c.endswith("_fasta")]]
-        refs = {}
-        for _, row in metadata.iterrows():
-            rid = str(row.get("reference_id", ""))
-            refs[rid] = StxReference(rid, str(row.get("accession", "")), str(row.get("stx_family", "")), str(row.get("stx_subtype", "")), str(row.get("variant_name", "")), str(row.get("strain", "")), str(row.get("citation_key", "")), int(float(row.get("length", 0) or 0)))
-    citations = pd.read_csv(citations_path, sep="\t", dtype=str).fillna("") if citations_path and citations_path.exists() else None
-    return StxDatabase(fasta_path=fasta_path, references=refs, metadata=metadata, citations=citations)
-
-def load_known_sites(path: Path) -> list[KnownSite]:
-    df = pd.read_csv(path, sep="\t", dtype=str).fillna("")
-    return [KnownSite(str(r.get("site_name","")), str(r.get("feature_type","")), str(r.get("match_gene","")), str(r.get("match_locus_tag","")), str(r.get("backbone_accession","")), str(r.get("backbone_label","")), str(r.get("category","")), str(r.get("note",""))) for _, r in df.iterrows()]
+class STXDatabase:
+    """STX reference database manager"""
+    
+    def __init__(self, db_path: Optional[str] = None):
+        """Initialize STX database
+        
+        Args:
+            db_path: Path to custom STX database (FASTA). If None, uses bundled database.
+        """
+        if db_path is None:
+            # Use bundled database
+            module_dir = Path(__file__).parent
+            self.fasta_path = module_dir.parent / "databases" / "stx_references.fasta"
+            self.metadata_path = module_dir.parent / "databases" / "stx_references.tsv"
+        else:
+            self.fasta_path = Path(db_path)
+            # Look for accompanying metadata file
+            self.metadata_path = self.fasta_path.with_suffix('.tsv')
+            if not self.metadata_path.exists():
+                self.metadata_path = self.fasta_path.with_name('stx_references.tsv')
+        
+        # Check database exists
+        if not self.fasta_path.exists():
+            raise FileNotFoundError(f"STX database not found: {self.fasta_path}")
+        
+        # Load metadata
+        self.metadata = self._load_metadata()
+        
+        # Load sequences
+        self.sequences = self._load_sequences()
+        
+        # Build reference mapping
+        self.references = self._build_reference_map()
+    
+    def _load_metadata(self) -> Dict[str, dict]:
+        """Load STX reference metadata from TSV file"""
+        metadata = {}
+        
+        if not self.metadata_path.exists():
+            # Return empty metadata if file doesn't exist
+            return metadata
+        
+        with open(self.metadata_path, 'r') as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            for row in reader:
+                ref_id = row.get('reference_id', row.get('accession', ''))
+                metadata[ref_id] = row
+        
+        return metadata
+    
+    def _load_sequences(self) -> Dict[str, str]:
+        """Load STX reference sequences from FASTA file"""
+        sequences = {}
+        
+        for record in SeqIO.parse(self.fasta_path, 'fasta'):
+            sequences[record.id] = str(record.seq)
+        
+        return sequences
+    
+    def _build_reference_map(self) -> Dict[str, dict]:
+        """Build mapping of reference IDs to comprehensive info"""
+        references = {}
+        
+        for seq_id in self.sequences:
+            ref_info = {
+                'sequence': self.sequences[seq_id],
+                'length': len(self.sequences[seq_id])
+            }
+            
+            # Add metadata if available
+            if seq_id in self.metadata:
+                ref_info.update(self.metadata[seq_id])
+            
+            # Parse header for additional info
+            header_info = self._parse_header(seq_id)
+            ref_info.update(header_info)
+            
+            references[seq_id] = ref_info
+        
+        return references
+    
+    def _parse_header(self, seq_id: str) -> Dict[str, str]:
+        """Parse FASTA header for subtype, gene info, etc."""
+        info = {}
+        
+        # Handle pipe-separated format: accession|subtype|gene|description
+        if '|' in seq_id:
+            parts = seq_id.split('|')
+            if len(parts) >= 2:
+                info['subtype'] = parts[1]
+            if len(parts) >= 3:
+                info['gene'] = parts[2]
+            if len(parts) >= 4:
+                info['description'] = parts[3]
+        
+        return info
+    
+    def get_reference_info(self, ref_id: str) -> Dict[str, str]:
+        """Get comprehensive reference information"""
+        return self.references.get(ref_id, {})
+    
+    def get_sequence(self, ref_id: str) -> Optional[str]:
+        """Get sequence for reference ID"""
+        return self.sequences.get(ref_id)
+    
+    def list_subtypes(self) -> set:
+        """Get set of all STX subtypes in database"""
+        subtypes = set()
+        
+        for ref_info in self.references.values():
+            if 'subtype' in ref_info:
+                subtypes.add(ref_info['subtype'])
+        
+        return subtypes
+    
+    def get_subtype_references(self, subtype: str) -> Dict[str, dict]:
+        """Get all references for a specific subtype"""
+        subtype_refs = {}
+        
+        for ref_id, ref_info in self.references.items():
+            if ref_info.get('subtype') == subtype:
+                subtype_refs[ref_id] = ref_info
+        
+        return subtype_refs
+    
+    def get_protein_accessions(self, subtype: str) -> Dict[str, str]:
+        """Get protein accessions for A and B subunits"""
+        accessions = {'A': '', 'B': ''}
+        
+        subtype_refs = self.get_subtype_references(subtype)
+        
+        for ref_id, ref_info in subtype_refs.items():
+            gene = ref_info.get('gene', '').upper()
+            if 'A' in gene:
+                accessions['A'] = ref_info.get('protein_accession', '')
+            elif 'B' in gene:
+                accessions['B'] = ref_info.get('protein_accession', '')
+        
+        return accessions
+    
+    def validate_database(self) -> List[str]:
+        """Validate database integrity and return any issues"""
+        issues = []
+        
+        # Check for required subtypes
+        required_subtypes = [
+            'stx1a', 'stx1c', 'stx1d',
+            'stx2a', 'stx2b', 'stx2c', 'stx2d', 'stx2e', 'stx2f', 'stx2g', 'stx2h'
+        ]
+        
+        found_subtypes = self.list_subtypes()
+        missing = set(required_subtypes) - found_subtypes
+        
+        if missing:
+            issues.append(f"Missing subtypes: {', '.join(sorted(missing))}")
+        
+        # Check for A/B subunit pairs
+        for subtype in found_subtypes:
+            refs = self.get_subtype_references(subtype)
+            has_a = any('A' in ref.get('gene', '').upper() for ref in refs.values())
+            has_b = any('B' in ref.get('gene', '').upper() for ref in refs.values())
+            
+            if not has_a:
+                issues.append(f"Missing A subunit for {subtype}")
+            if not has_b:
+                issues.append(f"Missing B subunit for {subtype}")
+        
+        # Check sequence lengths
+        for ref_id, ref_info in self.references.items():
+            seq_len = ref_info.get('length', 0)
+            if seq_len < 200:  # Minimum reasonable STX gene length
+                issues.append(f"Short sequence ({seq_len} bp): {ref_id}")
+            elif seq_len > 5000:  # Maximum reasonable STX gene length
+                issues.append(f"Long sequence ({seq_len} bp): {ref_id}")
+        
+        return issues

@@ -1,135 +1,188 @@
-from __future__ import annotations
-from dataclasses import dataclass, field
+"""
+I/O Utilities Module
+Query parsing and genome annotation utilities
+"""
+
+import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple, Optional
 from Bio import SeqIO
+from Bio.SeqRecord import SeqRecord
 
-@dataclass
-class FeatureRecord:
-    start: int
-    end: int
-    strand: str
-    feature_type: str
-    gene: str
-    locus_tag: str
-    product: str
-
-@dataclass
-class QueryGenome:
-    path: Path
-    sample: str
-    file_type: str
-    assembly_type: str
-    contig_lengths: Dict[str, int]
-    contig_order: List[str]
-    features: Dict[str, List[FeatureRecord]] = field(default_factory=dict)
-
-    @property
-    def num_contigs(self) -> int:
-        return len(self.contig_order)
-
-    @property
-    def genome_size(self) -> int:
-        return sum(self.contig_lengths.values())
-
-@dataclass
-class BackboneAnnotation:
-    label: str
-    path: Path
-    features: List[FeatureRecord]
-    gene_index: Dict[str, FeatureRecord]
-    locus_index: Dict[str, FeatureRecord]
-
-def _parse_query_spec(spec: str) -> Tuple[Path, Optional[str]]:
-    if ":" in spec:
-        path_str, label = spec.rsplit(":", 1)
-        if path_str:
-            return Path(path_str), label
-    return Path(spec), None
-
-def _detect_file_type(path: Path) -> str:
-    return "genbank" if path.suffix.lower() in {".gb", ".gbk", ".genbank", ".gbff"} else "fasta"
-
-def _parse_genbank(path: Path):
-    contig_lengths, contig_order, features = {}, [], {}
-    for record in SeqIO.parse(str(path), "genbank"):
-        contig_id = record.id
-        contig_order.append(contig_id)
-        contig_lengths[contig_id] = len(record.seq)
-        feats = []
-        for feat in record.features:
-            if feat.type not in {"CDS", "gene", "tRNA", "rRNA"}:
-                continue
-            q = feat.qualifiers
-            feats.append(FeatureRecord(
-                start=int(feat.location.start)+1,
-                end=int(feat.location.end),
-                strand="+" if feat.location.strand != -1 else "-",
-                feature_type=feat.type,
-                gene=";".join(q.get("gene", [""])),
-                locus_tag=";".join(q.get("locus_tag", [""])),
-                product=";".join(q.get("product", [""])),
-            ))
-        feats.sort(key=lambda x: (x.start, x.end))
-        features[contig_id] = feats
-    return contig_lengths, contig_order, features
-
-def _parse_fasta(path: Path):
-    contig_lengths, contig_order = {}, []
-    for record in SeqIO.parse(str(path), "fasta"):
-        contig_order.append(record.id)
-        contig_lengths[record.id] = len(record.seq)
-    return contig_lengths, contig_order
-
-def parse_query_inputs(query_specs: List[str]) -> List[QueryGenome]:
+def parse_query_genomes(query_string: str) -> List[Tuple[str, str]]:
+    """Parse query genome string into (file, strain_name) pairs
+    
+    Formats supported:
+    - single_file.fasta
+    - file1.fasta:strain1,file2.fasta:strain2
+    - file.fasta:strain_name
+    """
+    
     queries = []
-    for spec in query_specs:
-        path, label = _parse_query_spec(spec)
-        if not path.exists():
-            raise FileNotFoundError(f"Query file not found: {path}")
-        file_type = _detect_file_type(path)
-        sample = label or path.stem
-        if file_type == "genbank":
-            contig_lengths, contig_order, features = _parse_genbank(path)
-            assembly_type = "closed" if len(contig_order) == 1 else "draft"
-            queries.append(QueryGenome(path, sample, file_type, assembly_type, contig_lengths, contig_order, features))
+    
+    if ',' in query_string:
+        # Multiple files
+        for item in query_string.split(','):
+            item = item.strip()
+            if ':' in item:
+                file_path, strain_name = item.split(':', 1)
+                queries.append((file_path.strip(), strain_name.strip()))
+            else:
+                # Use filename as strain name
+                file_path = item
+                strain_name = Path(file_path).stem
+                queries.append((file_path, strain_name))
+    else:
+        # Single file
+        if ':' in query_string:
+            file_path, strain_name = query_string.split(':', 1)
+            queries.append((file_path.strip(), strain_name.strip()))
         else:
-            contig_lengths, contig_order = _parse_fasta(path)
-            assembly_type = "closed" if len(contig_order) == 1 else "draft"
-            queries.append(QueryGenome(path, sample, file_type, assembly_type, contig_lengths, contig_order, {}))
+            file_path = query_string.strip()
+            strain_name = Path(file_path).stem
+            queries.append((file_path, strain_name))
+    
     return queries
 
-def load_backbone_annotation(path: Path, label: str = "default_k12") -> BackboneAnnotation:
-    _, _, features_by_contig = _parse_genbank(path)
-    features = []
-    for feats in features_by_contig.values():
-        features.extend(feats)
-    gene_index = {f.gene: f for f in features if f.gene}
-    locus_index = {f.locus_tag: f for f in features if f.locus_tag}
-    return BackboneAnnotation(label=label, path=path, features=features, gene_index=gene_index, locus_index=locus_index)
+def load_genome_sequences(genome_file: str) -> Dict[str, SeqRecord]:
+    """Load genome sequences from FASTA file"""
+    
+    sequences = {}
+    
+    for record in SeqIO.parse(genome_file, 'fasta'):
+        sequences[record.id] = record
+    
+    return sequences
 
-def contig_number(query: QueryGenome, contig_id: str) -> int:
+def find_genome_annotations(genome_file: str, feature_type: str = "CDS") -> Dict[str, List[dict]]:
+    """Extract annotations from GenBank file if available
+    
+    Returns dictionary mapping contig IDs to lists of feature annotations
+    """
+    
+    annotations = {}
+    
+    # Check if GenBank file exists
+    gb_file = Path(genome_file).with_suffix('.gb')
+    if not gb_file.exists():
+        gb_file = Path(genome_file).with_suffix('.gbk')
+    
+    if not gb_file.exists():
+        return annotations
+    
     try:
-        return query.contig_order.index(contig_id)+1
-    except ValueError:
-        return -1
+        for record in SeqIO.parse(gb_file, 'genbank'):
+            contig_features = []
+            
+            for feature in record.features:
+                if feature.type == feature_type:
+                    feature_info = {
+                        'start': int(feature.location.start),
+                        'end': int(feature.location.end),
+                        'strand': feature.location.strand,
+                        'locus_tag': feature.qualifiers.get('locus_tag', [''])[0],
+                        'protein_id': feature.qualifiers.get('protein_id', [''])[0],
+                        'product': feature.qualifiers.get('product', ['hypothetical protein'])[0],
+                        'gene': feature.qualifiers.get('gene', [''])[0]
+                    }
+                    contig_features.append(feature_info)
+            
+            annotations[record.id] = contig_features
+    
+    except Exception as e:
+        print(f"Warning: Could not parse GenBank file {gb_file}: {e}")
+    
+    return annotations
 
-def find_overlapping_feature(query: QueryGenome, contig_id: str, start: int, end: int):
-    feats = query.features.get(contig_id, [])
-    best, best_overlap = None, 0
-    for feat in feats:
-        ov = max(0, min(end, feat.end)-max(start, feat.start)+1)
-        if ov > best_overlap:
-            best, best_overlap = feat, ov
-    return best
+def find_overlapping_genes(position: int, contig_id: str, 
+                          annotations: Dict[str, List[dict]],
+                          tolerance: int = 100) -> List[dict]:
+    """Find genes that overlap with a given position"""
+    
+    overlapping = []
+    
+    if contig_id not in annotations:
+        return overlapping
+    
+    for gene in annotations[contig_id]:
+        gene_start = gene['start']
+        gene_end = gene['end']
+        
+        # Check for overlap with tolerance
+        if (gene_start - tolerance <= position <= gene_end + tolerance):
+            overlapping.append(gene)
+    
+    return overlapping
 
-def find_flanking_features(query: QueryGenome, contig_id: str, start: int, end: int):
-    feats = query.features.get(contig_id, [])
-    left = right = None
-    for feat in feats:
-        if feat.end < start:
-            left = feat
-        elif feat.start > end:
-            right = feat
-            break
-    return left, right
+def extract_sequence_region(record: SeqRecord, start: int, end: int, 
+                           strand: str = '+') -> str:
+    """Extract sequence region from SeqRecord"""
+    
+    # Ensure coordinates are within bounds
+    start = max(0, start)
+    end = min(len(record.seq), end)
+    
+    if start >= end:
+        return ""
+    
+    sequence = str(record.seq[start:end])
+    
+    if strand == '-':
+        from Bio.Seq import Seq
+        sequence = str(Seq(sequence).reverse_complement())
+    
+    return sequence
+
+def format_coordinates(start: int, end: int, strand: str = '+') -> str:
+    """Format genomic coordinates for display"""
+    
+    coord_str = f"{start:,}–{end:,}"
+    
+    if strand == '+':
+        coord_str += " (+)"
+    elif strand == '-':
+        coord_str += " (−)"
+    
+    return coord_str
+
+def validate_fasta_file(file_path: str) -> Tuple[bool, str]:
+    """Validate that a file is a proper FASTA file"""
+    
+    if not Path(file_path).exists():
+        return False, f"File does not exist: {file_path}"
+    
+    try:
+        records = list(SeqIO.parse(file_path, 'fasta'))
+        
+        if not records:
+            return False, "No sequences found in file"
+        
+        # Check for valid sequences
+        for record in records:
+            if len(record.seq) == 0:
+                return False, f"Empty sequence found: {record.id}"
+            
+            # Check for valid nucleotide characters
+            valid_chars = set('ATCGNatcgn-')
+            seq_chars = set(str(record.seq))
+            
+            invalid = seq_chars - valid_chars
+            if invalid:
+                return False, f"Invalid nucleotide characters in {record.id}: {invalid}"
+        
+        return True, f"Valid FASTA file with {len(records)} sequences"
+    
+    except Exception as e:
+        return False, f"Error reading FASTA file: {str(e)}"
+
+def clean_sequence_id(seq_id: str) -> str:
+    """Clean sequence ID for safe use in filenames"""
+    
+    # Remove problematic characters
+    clean_id = re.sub(r'[^a-zA-Z0-9_.-]', '_', seq_id)
+    
+    # Limit length
+    if len(clean_id) > 50:
+        clean_id = clean_id[:50]
+    
+    return clean_id

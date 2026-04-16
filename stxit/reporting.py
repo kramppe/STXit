@@ -1,63 +1,300 @@
-from __future__ import annotations
+"""
+STX Reporting Module
+Generate comprehensive output files and summaries
+"""
+
+import csv
+import json
 from pathlib import Path
-from typing import Any, Dict
-import json, platform
-from datetime import datetime
-import pandas as pd
+from typing import List, Optional, Dict
+from .stx_typing import LocusCall
 
-def _calls_df(typing_results):
-    rows=[]
-    for c in typing_results.calls:
-        rows.append({"sample":c.sample,"assembly_type":c.assembly_type,"contig":c.contig,"contig_num":c.contig_num,"start":c.start,"end":c.end,"strand":c.strand,"stx_family":c.stx_family,"assigned_subtype":c.assigned_subtype,"nearest_reference_id":c.nearest_reference_id,"nearest_reference_accession":c.nearest_reference_accession,"nearest_reference_strain":c.nearest_reference_strain,"nearest_reference_citation":c.nearest_reference_citation,"pct_identity":round(c.pct_identity,3),"pct_coverage":round(c.pct_coverage,3),"hit_length":c.hit_length,"complete_partial":c.complete_partial,"exact_match":c.exact_match,"variant_status":c.variant_status,"annotation_source":c.annotation_source,"query_feature_type":c.query_feature_type,"query_gene":c.query_gene,"query_locus_tag":c.query_locus_tag,"query_product":c.query_product})
-    return pd.DataFrame(rows)
-
-def write_outputs(typing_results, db, phase2, phase3, plot_files, phastest_jobs, trna_runs, outdir: Path, cli_args: Dict[str, Any], version: str):
-    outdir.mkdir(parents=True, exist_ok=True)
-    calls_df=_calls_df(typing_results)
-    calls_df.to_csv(outdir/"stx_calls.long.tsv", sep="\t", index=False)
-    phase2.phage_regions.to_csv(outdir/"phage_regions.tsv", sep="\t", index=False)
-    phase2.stx_phage_overlap.to_csv(outdir/"stx_phage_overlap.tsv", sep="\t", index=False)
-    phase2.phage_insertion_context.to_csv(outdir/"phage_insertion_context.tsv", sep="\t", index=False)
-    phase2.phage_insertion_coords.to_csv(outdir/"phage_insertion_coords.tsv", sep="\t", index=False)
-    phase3.variant_differences.to_csv(outdir/"stx_variant_differences.tsv", sep="\t", index=False)
-    phase3.alignment_overview.to_csv(outdir/"stx_alignment_overview.tsv", sep="\t", index=False)
-    if phastest_jobs: pd.DataFrame(phastest_jobs).to_csv(outdir/"phastest_jobs.tsv", sep="\t", index=False)
-    if trna_runs: pd.DataFrame(trna_runs).to_csv(outdir/"trnascan_runs.tsv", sep="\t", index=False)
-
-    tree_index=[]
-    for k, v in phase3.tree_fasta_paths.items():
-        sample, subtype = k.split("::",1)
-        tree_index.append({"sample":sample,"subtype":subtype,"tree_fasta":v,"tree_newick":phase3.tree_newick_paths.get(k,"")})
-    pd.DataFrame(tree_index).to_csv(outdir/"stx_variant_tree.index.tsv", sep="\t", index=False)
-
-    plot_index=[]
-    for sample, files in plot_files.items():
-        plot_index.append({"sample":sample,"png":files.get("png",""),"svg":files.get("svg","")})
-    pd.DataFrame(plot_index).to_csv(outdir/"plot_index.tsv", sep="\t", index=False)
-
-    summary_rows=[]; stats_rows=[]
-    calls_by_sample={s:g.copy() for s,g in calls_df.groupby("sample")} if not calls_df.empty else {}
-    overlap_by_sample={s:g.copy() for s,g in phase2.stx_phage_overlap.groupby("sample")} if not phase2.stx_phage_overlap.empty else {}
-    context_by_sample={s:g.copy() for s,g in phase2.phage_insertion_context.groupby("sample")} if not phase2.phage_insertion_context.empty else {}
-    variant_by_sample={s:g.copy() for s,g in phase3.alignment_overview.groupby("sample")} if not phase3.alignment_overview.empty else {}
-
-    for query in typing_results.queries:
-        grp=calls_by_sample.get(query.sample, pd.DataFrame())
-        og=overlap_by_sample.get(query.sample, pd.DataFrame())
-        cg=context_by_sample.get(query.sample, pd.DataFrame())
-        vg=variant_by_sample.get(query.sample, pd.DataFrame())
-        subtypes=sorted({str(x) for x in grp["assigned_subtype"].tolist() if str(x)}) if not grp.empty else []
-        exact_count=int(grp["exact_match"].sum()) if not grp.empty else 0
-        variant_count=int((grp["variant_status"]=="subtype_like_variant").sum()) if not grp.empty else 0
-        novel_count=int((grp["variant_status"]=="unresolved_or_novel").sum()) if not grp.empty else 0
-        phage_ids=sorted({str(x) for x in og["phage_region_id"].tolist()}) if not og.empty else []
-        named_sites=sorted({str(x) for x in cg["known_insertion_site_name"].tolist() if str(x)}) if not cg.empty else []
-        trna_feats=sorted({str(x) for x in list(cg["nearest_trna_left"].tolist())+list(cg["nearest_trna_right"].tolist()) if str(x)}) if not cg.empty else []
-        plot_generated=query.sample in plot_files
-        summary_rows.append({"sample":query.sample,"stx_present":not grp.empty,"stx_family_calls":";".join(sorted({str(x) for x in grp["stx_family"].tolist()})) if not grp.empty else "","stx_subtype_calls":";".join(subtypes),"num_stx_copies":int(len(grp)),"exact_match_count":exact_count,"variant_match_count":variant_count,"novel_candidate_count":novel_count,"num_stx_phages":int(len(set(phage_ids))),"stx_in_phage":not og.empty,"phage_region_ids":";".join(phage_ids),"named_insertion_sites":";".join(named_sites),"nearest_trna_features":";".join(trna_feats),"variant_tree_generated":not vg.empty,"closed_genome_plot_generated":plot_generated})
-        stats_rows.append({"sample":query.sample,"assembly_type":query.assembly_type,"num_contigs":query.num_contigs,"genome_size":query.genome_size,"stx_present":not grp.empty,"stx_subtype_calls":";".join(subtypes),"num_stx_copies":int(len(grp)),"num_stx_phages":int(len(set(phage_ids))),"stx_in_phage":not og.empty,"insertion_site_classes":";".join(sorted({str(x) for x in cg["insertion_site_class"].tolist()})) if not cg.empty else "","named_insertion_sites":";".join(named_sites),"variant_tree_generated":not vg.empty,"closed_genome_plot_generated":plot_generated,"notes":"no_stx_hit" if grp.empty else ""})
-
-    pd.DataFrame(summary_rows).to_csv(outdir/"stx_summary.tsv", sep="\t", index=False)
-    pd.DataFrame(stats_rows).to_csv(outdir/"STX_stats.tsv", sep="\t", index=False)
-    md=pd.DataFrame([{"field":"tool","value":"STXit"},{"field":"version","value":version},{"field":"timestamp","value":datetime.utcnow().isoformat()+"Z"},{"field":"platform","value":platform.platform()},{"field":"db_fasta","value":str(db.fasta_path)},{"field":"db_reference_count","value":len(db.references)},{"field":"phastest_job_count","value":len(phastest_jobs)},{"field":"trnascan_run_count","value":len(trna_runs)},{"field":"cli_args","value":json.dumps(cli_args, sort_keys=True)}])
-    md.to_csv(outdir/"run_metadata.tsv", sep="\t", index=False)
+class STXReporter:
+    """Generate STX analysis reports"""
+    
+    def __init__(self, prefix: str = "stx"):
+        self.prefix = prefix
+    
+    def write_results(self, loci: List[LocusCall], output_dir: Path,
+                     prophage_data: Optional[Dict] = None,
+                     trna_data: Optional[Dict] = None):
+        """Write all output files"""
+        
+        # Main results files
+        self._write_calls_long(loci, output_dir)
+        self._write_summary(loci, output_dir)
+        self._write_variant_differences(loci, output_dir)
+        
+        # Optional analyses
+        if any(hasattr(locus, 'indels') and locus.indels for locus in loci):
+            self._write_indel_report(loci, output_dir)
+        
+        # JSON export for programmatic access
+        self._write_json_export(loci, output_dir, prophage_data, trna_data)
+        
+        # Analysis summary log
+        self._write_analysis_log(loci, output_dir, prophage_data, trna_data)
+    
+    def _write_calls_long(self, loci: List[LocusCall], output_dir: Path):
+        """Write detailed STX calls with full annotation"""
+        
+        output_file = output_dir / f"{self.prefix}_calls.long.tsv"
+        
+        fieldnames = [
+            'locus_id', 'contig', 'start', 'end', 'strand', 'length',
+            'subtype', 'identity_pct', 'coverage_pct', 'ref_accession',
+            'nearest_reference_strain', 
+            'gene_A', 'gene_B',
+            'ref_protein_accession_A', 'ref_protein_accession_B',
+            'stxA_locus_tag', 'stxA_protein_id', 'stxA_product',
+            'stxB_locus_tag', 'stxB_protein_id', 'stxB_product',
+            'variant_count', 'synonymous_variants', 'nonsynonymous_variants',
+            'stx_in_phage', 'prophage_region', 'insertion_site',
+            'region_tools'
+        ]
+        
+        with open(output_file, 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter='\t')
+            writer.writeheader()
+            
+            for i, locus in enumerate(loci, 1):
+                row = {
+                    'locus_id': f"STX_{i:03d}",
+                    'contig': locus.query_id,
+                    'start': locus.start,
+                    'end': locus.end,
+                    'strand': locus.strand,
+                    'length': locus.end - locus.start + 1,
+                    'subtype': locus.subtype,
+                    'identity_pct': f"{locus.identity:.2f}",
+                    'coverage_pct': f"{locus.coverage:.2f}",
+                    'ref_accession': locus.ref_accession,
+                    'nearest_reference_strain': locus.nearest_reference_strain,
+                    'gene_A': locus.gene_A,
+                    'gene_B': locus.gene_B,
+                    'ref_protein_accession_A': locus.ref_protein_accession_A,
+                    'ref_protein_accession_B': locus.ref_protein_accession_B,
+                    'stxA_locus_tag': locus.stxA_locus_tag,
+                    'stxA_protein_id': locus.stxA_protein_id,
+                    'stxA_product': locus.stxA_product,
+                    'stxB_locus_tag': locus.stxB_locus_tag,
+                    'stxB_protein_id': locus.stxB_protein_id,
+                    'stxB_product': locus.stxB_product,
+                    'variant_count': getattr(locus, 'variant_count', 0),
+                    'synonymous_variants': getattr(locus, 'synonymous_count', 0),
+                    'nonsynonymous_variants': getattr(locus, 'nonsynonymous_count', 0),
+                    'stx_in_phage': getattr(locus, 'in_phage', False),
+                    'prophage_region': getattr(locus, 'prophage_region', ''),
+                    'insertion_site': getattr(locus, 'insertion_site', ''),
+                    'region_tools': getattr(locus, 'region_tools', '')
+                }
+                
+                writer.writerow(row)
+    
+    def _write_summary(self, loci: List[LocusCall], output_dir: Path):
+        """Write concise summary table"""
+        
+        output_file = output_dir / f"{self.prefix}_summary.tsv"
+        
+        fieldnames = [
+            'locus_id', 'subtype', 'contig', 'coordinates', 'strand',
+            'identity_pct', 'status', 'in_phage'
+        ]
+        
+        with open(output_file, 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter='\t')
+            writer.writeheader()
+            
+            for i, locus in enumerate(loci, 1):
+                # Determine status
+                status = "Exact match" if locus.identity >= 99.9 else "Subtype-like variant"
+                
+                row = {
+                    'locus_id': f"STX_{i:03d}",
+                    'subtype': locus.subtype,
+                    'contig': locus.query_id,
+                    'coordinates': f"{locus.start:,}–{locus.end:,}",
+                    'strand': '(−)' if locus.strand == '-' else '(+)',
+                    'identity_pct': f"{locus.identity:.1f}%",
+                    'status': status,
+                    'in_phage': getattr(locus, 'in_phage', False)
+                }
+                
+                writer.writerow(row)
+    
+    def _write_variant_differences(self, loci: List[LocusCall], output_dir: Path):
+        """Write variant differences table"""
+        
+        output_file = output_dir / f"{self.prefix}_variant_differences.tsv"
+        
+        fieldnames = [
+            'locus_id', 'subtype', 'position', 'ref_nt', 'query_nt',
+            'ref_codon', 'query_codon', 'ref_aa', 'query_aa',
+            'variant_type', 'subunit', 'aa_position'
+        ]
+        
+        with open(output_file, 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter='\t')
+            writer.writeheader()
+            
+            # Placeholder for variant analysis results
+            # Would be populated by VariantAnalyzer
+            for i, locus in enumerate(loci, 1):
+                if hasattr(locus, 'variants'):
+                    for variant in locus.variants:
+                        row = {
+                            'locus_id': f"STX_{i:03d}",
+                            'subtype': locus.subtype,
+                            'position': variant.get('position', ''),
+                            'ref_nt': variant.get('ref_nt', ''),
+                            'query_nt': variant.get('query_nt', ''),
+                            'ref_codon': variant.get('ref_codon', ''),
+                            'query_codon': variant.get('query_codon', ''),
+                            'ref_aa': variant.get('ref_aa', ''),
+                            'query_aa': variant.get('query_aa', ''),
+                            'variant_type': variant.get('type', ''),
+                            'subunit': variant.get('subunit', ''),
+                            'aa_position': variant.get('aa_position', '')
+                        }
+                        writer.writerow(row)
+    
+    def _write_indel_report(self, loci: List[LocusCall], output_dir: Path):
+        """Write indel analysis report"""
+        
+        output_file = output_dir / f"{self.prefix}_indel_report.tsv"
+        
+        fieldnames = [
+            'locus_id', 'subtype', 'indel_type', 'ref_pos', 'query_genome_pos',
+            'indel_size', 'indel_sequence', 'codon_impact', 'subunit_affected',
+            'zone', 'disruption_consequence',
+            'potential_mobile_element', 'potential_mobile_element_reason',
+            'tn_blast_run', 'tn_family', 'tn_pct_identity', 'tn_pct_coverage',
+            'ref_flank_left', 'ref_flank_right'
+        ]
+        
+        with open(output_file, 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter='\t')
+            writer.writeheader()
+            
+            # Placeholder for indel analysis results
+            # Would be populated by Indel analyzer
+            for i, locus in enumerate(loci, 1):
+                if hasattr(locus, 'indels'):
+                    for indel in locus.indels:
+                        row = {
+                            'locus_id': f"STX_{i:03d}",
+                            'subtype': locus.subtype,
+                            **indel  # Spread indel analysis results
+                        }
+                        writer.writerow(row)
+    
+    def _write_json_export(self, loci: List[LocusCall], output_dir: Path,
+                          prophage_data: Optional[Dict] = None,
+                          trna_data: Optional[Dict] = None):
+        """Write machine-readable JSON export"""
+        
+        output_file = output_dir / f"{self.prefix}_results.json"
+        
+        export_data = {
+            'analysis_type': 'STXit',
+            'version': '1.0.3',
+            'stx_loci_count': len(loci),
+            'stx_loci': [],
+            'prophage_analysis': prophage_data,
+            'trna_analysis': trna_data
+        }
+        
+        for i, locus in enumerate(loci, 1):
+            locus_data = {
+                'locus_id': f"STX_{i:03d}",
+                'contig': locus.query_id,
+                'start': locus.start,
+                'end': locus.end,
+                'strand': locus.strand,
+                'subtype': locus.subtype,
+                'identity': locus.identity,
+                'coverage': locus.coverage,
+                'reference': {
+                    'accession': locus.ref_accession,
+                    'strain': locus.nearest_reference_strain,
+                    'gene_A': locus.gene_A,
+                    'gene_B': locus.gene_B,
+                    'protein_A': locus.ref_protein_accession_A,
+                    'protein_B': locus.ref_protein_accession_B
+                },
+                'annotation': {
+                    'stxA_locus_tag': locus.stxA_locus_tag,
+                    'stxA_product': locus.stxA_product,
+                    'stxB_locus_tag': locus.stxB_locus_tag,
+                    'stxB_product': locus.stxB_product
+                }
+            }
+            
+            # Add optional analysis results
+            if hasattr(locus, 'variants'):
+                locus_data['variants'] = locus.variants
+            if hasattr(locus, 'indels'):
+                locus_data['indels'] = locus.indels
+            if hasattr(locus, 'in_phage'):
+                locus_data['prophage_context'] = {
+                    'in_phage': locus.in_phage,
+                    'region': getattr(locus, 'prophage_region', ''),
+                    'insertion_site': getattr(locus, 'insertion_site', '')
+                }
+            
+            export_data['stx_loci'].append(locus_data)
+        
+        with open(output_file, 'w') as f:
+            json.dump(export_data, f, indent=2)
+    
+    def _write_analysis_log(self, loci: List[LocusCall], output_dir: Path,
+                           prophage_data: Optional[Dict] = None,
+                           trna_data: Optional[Dict] = None):
+        """Write analysis summary log"""
+        
+        output_file = output_dir / f"{self.prefix}_analysis.log"
+        
+        with open(output_file, 'w') as f:
+            f.write("STXit Analysis Summary\n")
+            f.write("=" * 50 + "\n\n")
+            
+            f.write(f"STX Loci Detected: {len(loci)}\n")
+            
+            if loci:
+                # Subtype summary
+                subtypes = {}
+                for locus in loci:
+                    subtypes[locus.subtype] = subtypes.get(locus.subtype, 0) + 1
+                
+                f.write("\nSubtype Distribution:\n")
+                for subtype, count in sorted(subtypes.items()):
+                    f.write(f"  {subtype}: {count}\n")
+                
+                # Identity distribution
+                exact_matches = sum(1 for locus in loci if locus.identity >= 99.9)
+                variants = len(loci) - exact_matches
+                
+                f.write(f"\nSequence Identity:\n")
+                f.write(f"  Exact matches (≥99.9%): {exact_matches}\n")
+                f.write(f"  Subtype-like variants: {variants}\n")
+                
+                # Prophage context
+                if prophage_data:
+                    phage_associated = sum(1 for locus in loci 
+                                         if getattr(locus, 'in_phage', False))
+                    f.write(f"\nProphage Context:\n")
+                    f.write(f"  STX loci in prophage regions: {phage_associated}\n")
+                    f.write(f"  STX loci in chromosome: {len(loci) - phage_associated}\n")
+                
+                # Variant analysis
+                total_variants = sum(getattr(locus, 'variant_count', 0) for locus in loci)
+                if total_variants > 0:
+                    synonymous = sum(getattr(locus, 'synonymous_count', 0) for locus in loci)
+                    nonsynonymous = sum(getattr(locus, 'nonsynonymous_count', 0) for locus in loci)
+                    
+                    f.write(f"\nVariant Analysis:\n")
+                    f.write(f"  Total variants: {total_variants}\n")
+                    f.write(f"  Synonymous: {synonymous}\n")
+                    f.write(f"  Non-synonymous: {nonsynonymous}\n")
+            
+            f.write("\nAnalysis completed successfully.\n")

@@ -1,113 +1,189 @@
-from __future__ import annotations
+"""
+STX Typing Module
+BLAST-based STX subtype detection and calling
+"""
+
+import os
+import tempfile
+import subprocess
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Dict, List
-import shutil, subprocess, tempfile
-import pandas as pd
-from .io_utils import QueryGenome, contig_number, find_overlapping_feature
-from .stx_db import StxDatabase
+from typing import List, Optional
+from Bio import SeqIO
+from Bio.SeqRecord import SeqRecord
 
 @dataclass
 class LocusCall:
-    sample: str
-    assembly_type: str
-    contig: str
-    contig_num: int
+    """STX locus detection result"""
+    query_id: str
     start: int
     end: int
     strand: str
-    stx_family: str
-    assigned_subtype: str
-    nearest_reference_id: str
-    nearest_reference_accession: str
-    nearest_reference_strain: str
-    nearest_reference_citation: str
-    pct_identity: float
-    pct_coverage: float
-    hit_length: int
-    complete_partial: str
-    exact_match: bool
-    variant_status: str
-    annotation_source: str
-    query_feature_type: str
-    query_gene: str
-    query_locus_tag: str
-    query_product: str
+    subtype: str
+    identity: float
+    coverage: float
+    ref_accession: str
+    ref_length: int
+    query_sequence: str
+    
+    # Reference database info
+    gene_A: str = ""
+    gene_B: str = ""
+    ref_protein_accession_A: str = ""
+    ref_protein_accession_B: str = ""
+    nearest_reference_strain: str = ""
+    
+    # Query genome annotation
+    stxA_locus_tag: str = ""
+    stxA_protein_id: str = ""
+    stxA_product: str = ""
+    stxB_locus_tag: str = ""
+    stxB_protein_id: str = ""
+    stxB_product: str = ""
 
-@dataclass
-class TypingResults:
-    calls: List[LocusCall]
-    queries: List[QueryGenome]
-    blast_tables: Dict[str, Path]
-
-def _run(cmd, cwd=None):
-    subprocess.run(cmd, cwd=str(cwd) if cwd else None, check=True)
-
-def _check_executable(name):
-    if shutil.which(name) is None:
-        raise RuntimeError(f"Required executable not found in PATH: {name}")
-
-def _cluster_hits(df: pd.DataFrame) -> List[pd.DataFrame]:
-    if df.empty:
-        return []
-    df = df.sort_values(["sseqid","strand_norm","sstart_norm","send_norm","bitscore"], ascending=[True,True,True,True,False]).copy()
-    clusters=[]; current=[]; current_key=None; current_start=None; current_end=None
-    for _, row in df.iterrows():
-        key=(row["sseqid"], row["strand_norm"]); start=int(row["sstart_norm"]); end=int(row["send_norm"])
-        if current_key is None:
-            current=[row]; current_key=key; current_start=start; current_end=end; continue
-        overlaps = key == current_key and start <= current_end + 200 and end >= current_start - 200
-        if overlaps:
-            current.append(row); current_start=min(current_start, start); current_end=max(current_end, end)
-        else:
-            clusters.append(pd.DataFrame(current)); current=[row]; current_key=key; current_start=start; current_end=end
-    if current:
-        clusters.append(pd.DataFrame(current))
-    return clusters
-
-def run_typing(queries: List[QueryGenome], db: StxDatabase, outdir: Path, threads: int, min_identity: float, min_coverage: float, blast_task: str, keep_temp: bool = False) -> TypingResults:
-    _check_executable("makeblastdb"); _check_executable("blastn")
-    calls=[]; blast_tables={}
-    temp_root_ctx = tempfile.TemporaryDirectory(prefix="stxit_merged_", dir=str(outdir))
-    temp_root = Path(temp_root_ctx.name)
-    for query in queries:
-        qdir=temp_root / query.sample; qdir.mkdir(parents=True, exist_ok=True)
-        db_prefix=qdir / f"{query.sample}.db"
-        _run(["makeblastdb","-in",str(query.path),"-dbtype","nucl","-out",str(db_prefix)])
-        out=qdir / f"{query.sample}.blast.tsv"
-        outfmt="6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen slen qcovs sstrand"
-        _run(["blastn","-task",blast_task,"-query",str(db.fasta_path),"-db",str(db_prefix),"-out",str(out),"-outfmt",outfmt,"-num_threads",str(threads)])
-        blast_tables[query.sample]=out
-        if out.stat().st_size == 0:
-            continue
-        cols=["qseqid","sseqid","pident","length","mismatch","gapopen","qstart","qend","sstart","send","evalue","bitscore","qlen","slen","qcovs","sstrand"]
-        df=pd.read_csv(out, sep="\t", names=cols)
-        if df.empty:
-            continue
-        df["pident"]=df["pident"].astype(float); df["qcovs"]=df["qcovs"].astype(float); df["bitscore"]=df["bitscore"].astype(float)
-        df=df[(df["pident"]>=min_identity)&(df["qcovs"]>=min_coverage)].copy()
-        if df.empty:
-            continue
-        df["strand_norm"]=df["sstrand"].replace({"plus":"+","minus":"-"})
-        df["sstart_norm"]=df[["sstart","send"]].min(axis=1)
-        df["send_norm"]=df[["sstart","send"]].max(axis=1)
-        for cluster in _cluster_hits(df):
-            best=cluster.sort_values(["bitscore","pident","qcovs","length"], ascending=[False,False,False,False]).iloc[0]
-            ref=db.references.get(best["qseqid"])
-            if ref is None:
-                continue
-            start=int(best["sstart_norm"]); end=int(best["send_norm"]); strand=str(best["strand_norm"])
-            feat=find_overlapping_feature(query, str(best["sseqid"]), start, end)
-            exact=float(best["pident"])>=100.0 and float(best["qcovs"])>=100.0
-            complete_partial="complete" if float(best["qcovs"])>=95.0 else "partial"
-            variant_status="exact_match" if exact else ("subtype_like_variant" if float(best["qcovs"])>=90.0 and float(best["pident"])>=95.0 else "unresolved_or_novel")
-            calls.append(LocusCall(
-                sample=query.sample, assembly_type=query.assembly_type, contig=str(best["sseqid"]), contig_num=contig_number(query, str(best["sseqid"])),
-                start=start, end=end, strand=strand, stx_family=ref.stx_family, assigned_subtype=ref.stx_subtype,
-                nearest_reference_id=ref.reference_id, nearest_reference_accession=ref.accession, nearest_reference_strain=ref.strain,
-                nearest_reference_citation=ref.citation_key, pct_identity=float(best["pident"]), pct_coverage=float(best["qcovs"]),
-                hit_length=int(best["length"]), complete_partial=complete_partial, exact_match=exact, variant_status=variant_status,
-                annotation_source=query.file_type if feat else "", query_feature_type=feat.feature_type if feat else "",
-                query_gene=feat.gene if feat else "", query_locus_tag=feat.locus_tag if feat else "", query_product=feat.product if feat else ""
-            ))
-    return TypingResults(calls=calls, queries=queries, blast_tables=blast_tables)
+class STXTyper:
+    """STX detection and typing using BLAST"""
+    
+    def __init__(self, stx_database, min_identity=80.0, min_coverage=70.0):
+        self.stx_db = stx_database
+        self.min_identity = min_identity
+        self.min_coverage = min_coverage
+        
+    def detect_stx(self, genome_file: str, threads: int = 4) -> List[LocusCall]:
+        """Detect STX genes in genome using BLAST"""
+        
+        # Create temporary BLAST database from genome
+        with tempfile.TemporaryDirectory() as temp_dir:
+            genome_db = os.path.join(temp_dir, "genome")
+            
+            # Make BLAST database
+            cmd = [
+                "makeblastdb",
+                "-in", genome_file,
+                "-dbtype", "nucl",
+                "-out", genome_db
+            ]
+            subprocess.run(cmd, check=True, capture_output=True)
+            
+            # Run BLAST search
+            blast_out = os.path.join(temp_dir, "blast_results.txt")
+            cmd = [
+                "blastn",
+                "-query", self.stx_db.fasta_path,
+                "-db", genome_db,
+                "-out", blast_out,
+                "-outfmt", "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen slen",
+                "-num_threads", str(threads),
+                "-max_target_seqs", "10",
+                "-evalue", "1e-10"
+            ]
+            subprocess.run(cmd, check=True, capture_output=True)
+            
+            # Parse BLAST results
+            hits = self._parse_blast_results(blast_out, genome_file)
+            
+            # Filter and call loci
+            loci = self._call_loci(hits)
+            
+            return loci
+    
+    def _parse_blast_results(self, blast_file: str, genome_file: str) -> List[dict]:
+        """Parse BLAST tabular output"""
+        hits = []
+        
+        with open(blast_file, 'r') as f:
+            for line in f:
+                if line.startswith('#'):
+                    continue
+                    
+                fields = line.strip().split('\t')
+                if len(fields) < 14:
+                    continue
+                
+                hit = {
+                    'qseqid': fields[0],      # Reference STX gene
+                    'sseqid': fields[1],      # Genome contig
+                    'pident': float(fields[2]),
+                    'length': int(fields[3]),
+                    'mismatch': int(fields[4]),
+                    'gapopen': int(fields[5]),
+                    'qstart': int(fields[6]),
+                    'qend': int(fields[7]),
+                    'sstart': int(fields[8]),
+                    'send': int(fields[9]),
+                    'evalue': float(fields[10]),
+                    'bitscore': float(fields[11]),
+                    'qlen': int(fields[12]),   # Reference length
+                    'slen': int(fields[13])    # Contig length
+                }
+                
+                # Calculate coverage
+                hit['coverage'] = (hit['length'] / hit['qlen']) * 100
+                
+                # Apply filters
+                if (hit['pident'] >= self.min_identity and 
+                    hit['coverage'] >= self.min_coverage and
+                    hit['length'] >= 0.7 * hit['qlen']):  # Length filter for spurious hits
+                    
+                    hits.append(hit)
+        
+        return hits
+    
+    def _call_loci(self, hits: List[dict]) -> List[LocusCall]:
+        """Convert BLAST hits to STX locus calls"""
+        loci = []
+        
+        for hit in hits:
+            # Extract subtype from reference ID
+            ref_id = hit['qseqid']
+            subtype = self._extract_subtype(ref_id)
+            
+            # Get reference info
+            ref_info = self.stx_db.get_reference_info(ref_id)
+            
+            # Determine coordinates and strand
+            start = min(hit['sstart'], hit['send'])
+            end = max(hit['sstart'], hit['send'])
+            strand = '+' if hit['sstart'] < hit['send'] else '-'
+            
+            # Extract query sequence (placeholder - would need genome parsing)
+            query_seq = "SEQUENCE_PLACEHOLDER"
+            
+            locus = LocusCall(
+                query_id=hit['sseqid'],
+                start=start,
+                end=end,
+                strand=strand,
+                subtype=subtype,
+                identity=hit['pident'],
+                coverage=hit['coverage'],
+                ref_accession=ref_id,
+                ref_length=hit['qlen'],
+                query_sequence=query_seq,
+                gene_A=ref_info.get('gene_A', f'{subtype}A'),
+                gene_B=ref_info.get('gene_B', f'{subtype}B'),
+                ref_protein_accession_A=ref_info.get('protein_A', ''),
+                ref_protein_accession_B=ref_info.get('protein_B', ''),
+                nearest_reference_strain=ref_info.get('strain', '')
+            )
+            
+            loci.append(locus)
+        
+        return loci
+    
+    def _extract_subtype(self, ref_id: str) -> str:
+        """Extract STX subtype from reference ID"""
+        # Handle different ID formats
+        if '|' in ref_id:
+            # Format: accession|subtype|...
+            parts = ref_id.split('|')
+            if len(parts) >= 2:
+                return parts[1]
+        
+        # Fallback: look for stx pattern
+        ref_lower = ref_id.lower()
+        for subtype in ['stx1a', 'stx1c', 'stx1d', 'stx2a', 'stx2b', 'stx2c', 
+                       'stx2d', 'stx2e', 'stx2f', 'stx2g', 'stx2h']:
+            if subtype in ref_lower:
+                return subtype
+        
+        return 'unknown'

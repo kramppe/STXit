@@ -1,0 +1,23 @@
+accession	subtype	subunit	description	reference_strain
+AAA68668.1	stx1a	A	Stx1a A-subunit	EDL933
+AAA68669.1	stx1a	B	Stx1a B-subunit	EDL933
+CAC85819.1	stx1c	A	Stx1c A-subunit	O157:H-
+CAC85820.1	stx1c	B	Stx1c B-subunit	O157:H-
+AHN56381.1	stx1d	A	Stx1d A-subunit	O8:H19
+AHN56382.1	stx1d	B	Stx1d B-subunit	O8:H19
+AAA68667.1	stx2a	A	Stx2a A-subunit	EDL933
+AAA68666.1	stx2a	B	Stx2a B-subunit	EDL933
+CAD29975.1	stx2b	A	Stx2b A-subunit	strain S86
+CAD29976.1	stx2b	B	Stx2b B-subunit	strain S86
+CAC43991.1	stx2c	A	Stx2c A-subunit	EC4115
+CAC43992.1	stx2c	B	Stx2c B-subunit	EC4115
+AAF75308.1	stx2d	A	Stx2d A-subunit	EH250
+AAF75309.1	stx2d	B	Stx2d B-subunit	EH250
+CAA53208.1	stx2e	A	Stx2e A-subunit	pig STEC
+CAA53209.1	stx2e	B	Stx2e B-subunit	pig STEC
+BAC44987.1	stx2f	A	Stx2f A-subunit	FukV01
+BAC44988.1	stx2f	B	Stx2f B-subunit	FukV01
+AAN82598.1	stx2g	A	Stx2g A-subunit	
+AAN82599.1	stx2g	B	Stx2g B-subunit	
+WP_000649753.1	stx2h	A	Stx2h A-subunit	
+WP_000649751.1	stx2h	B	Stx2h B-subunit	

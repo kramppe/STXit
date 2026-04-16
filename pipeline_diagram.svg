@@ -1,0 +1,105 @@
+<svg viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="800" height="500" fill="#f8f9fa"/>
+  
+  <!-- Input Files (Teal) -->
+  <rect x="50" y="50" width="120" height="60" rx="5" fill="#20B2AA" stroke="#008B8B" stroke-width="2"/>
+  <text x="110" y="75" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="12" font-weight="bold">Genome FASTA</text>
+  <text x="110" y="90" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="10">(.fasta/.gbk)</text>
+  
+  <rect x="50" y="130" width="120" height="60" rx="5" fill="#20B2AA" stroke="#008B8B" stroke-width="2"/>
+  <text x="110" y="155" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="12" font-weight="bold">STX Database</text>
+  <text x="110" y="170" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="10">(bundled)</text>
+  
+  <!-- STX Detection (Purple) -->
+  <rect x="220" y="80" width="140" height="80" rx="5" fill="#8B5CF6" stroke="#7C3AED" stroke-width="2"/>
+  <text x="290" y="105" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold">STXit Detection</text>
+  <text x="290" y="125" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11">BLAST vs STX DB</text>
+  <text x="290" y="140" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11">Subtype calling</text>
+  <text x="290" y="155" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11">A/B annotation</text>
+  
+  <!-- Arrows from inputs to STX detection -->
+  <path d="M 170 80 L 200 80 L 210 90 L 220 100" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <path d="M 170 160 L 200 160 L 210 150 L 220 140" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Prophage Analysis (Coral) -->
+  <rect x="220" y="220" width="140" height="80" rx="5" fill="#FF6B6B" stroke="#FF5252" stroke-width="2"/>
+  <text x="290" y="245" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Prophage Context</text>
+  <text x="290" y="265" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11">PHASTEST API</text>
+  <text x="290" y="280" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11">Insertion sites</text>
+  <text x="290" y="295" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11">tRNAscan-SE</text>
+  
+  <!-- Variant Analysis (Amber) -->
+  <rect x="420" y="80" width="140" height="80" rx="5" fill="#F59E0B" stroke="#D97706" stroke-width="2"/>
+  <text x="490" y="105" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Variant Analysis</text>
+  <text x="490" y="125" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11">Codon-aware</text>
+  <text x="490" y="140" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11">Syn/Non-syn</text>
+  <text x="490" y="155" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11">Indel detection</text>
+  
+  <!-- Indel Analysis (Amber) -->
+  <rect x="420" y="220" width="140" height="80" rx="5" fill="#F59E0B" stroke="#D97706" stroke-width="2"/>
+  <text x="490" y="245" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Indel Analysis</text>
+  <text x="490" y="265" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11">IS element detect</text>
+  <text x="490" y="280" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11">TnCentral BLAST</text>
+  <text x="490" y="295" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11">Disruption impact</text>
+  
+  <!-- Reporting (Purple) -->
+  <rect x="610" y="150" width="140" height="80" rx="5" fill="#8B5CF6" stroke="#7C3AED" stroke-width="2"/>
+  <text x="680" y="175" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold">STXit Reporting</text>
+  <text x="680" y="195" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11">Comprehensive TSVs</text>
+  <text x="680" y="210" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11">Genome plots</text>
+  <text x="680" y="225" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11">JSON export</text>
+  
+  <!-- Output Files (Gray) -->
+  <rect x="610" y="280" width="65" height="45" rx="3" fill="#9CA3AF" stroke="#6B7280" stroke-width="1"/>
+  <text x="642" y="300" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="10" font-weight="bold">calls.long</text>
+  <text x="642" y="315" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="9">.tsv</text>
+  
+  <rect x="685" y="280" width="65" height="45" rx="3" fill="#9CA3AF" stroke="#6B7280" stroke-width="1"/>
+  <text x="717" y="300" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="10" font-weight="bold">summary</text>
+  <text x="717" y="315" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="9">.tsv</text>
+  
+  <rect x="610" y="340" width="65" height="45" rx="3" fill="#9CA3AF" stroke="#6B7280" stroke-width="1"/>
+  <text x="642" y="360" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="10" font-weight="bold">variants</text>
+  <text x="642" y="375" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="9">.tsv</text>
+  
+  <rect x="685" y="340" width="65" height="45" rx="3" fill="#9CA3AF" stroke="#6B7280" stroke-width="1"/>
+  <text x="717" y="360" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="10" font-weight="bold">plots</text>
+  <text x="717" y="375" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="9">.png/.svg</text>
+  
+  <!-- Flow arrows -->
+  <path d="M 360 120 L 420 120" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <path d="M 360 260 L 420 260" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <path d="M 560 120 L 580 120 L 590 140 L 610 160" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <path d="M 560 260 L 580 260 L 590 240 L 610 220" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <path d="M 680 230 L 680 250 L 680 270 L 680 280" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Vertical connection between analysis blocks -->
+  <path d="M 490 160 L 490 180 L 490 200 L 490 220" fill="none" stroke="#666" stroke-width="1" stroke-dasharray="3,3"/>
+  
+  <!-- Arrow marker definition -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
+    </marker>
+  </defs>
+  
+  <!-- Title -->
+  <text x="400" y="30" text-anchor="middle" fill="#374151" font-family="Arial, sans-serif" font-size="18" font-weight="bold">STXit Pipeline Schema</text>
+  
+  <!-- Legend -->
+  <rect x="50" y="380" width="15" height="15" fill="#20B2AA"/>
+  <text x="75" y="392" fill="#374151" font-family="Arial, sans-serif" font-size="11">Input files</text>
+  
+  <rect x="150" y="380" width="15" height="15" fill="#8B5CF6"/>
+  <text x="175" y="392" fill="#374151" font-family="Arial, sans-serif" font-size="11">Core analysis</text>
+  
+  <rect x="260" y="380" width="15" height="15" fill="#FF6B6B"/>
+  <text x="285" y="392" fill="#374151" font-family="Arial, sans-serif" font-size="11">Prophage context</text>
+  
+  <rect x="380" y="380" width="15" height="15" fill="#F59E0B"/>
+  <text x="405" y="392" fill="#374151" font-family="Arial, sans-serif" font-size="11">Variant analysis</text>
+  
+  <rect x="500" y="380" width="15" height="15" fill="#9CA3AF"/>
+  <text x="525" y="392" fill="#374151" font-family="Arial, sans-serif" font-size="11">Output files</text>
+</svg>

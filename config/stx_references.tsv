@@ -1,4 +1,0 @@
-reference_id	stx_family	stx_subtype	variant_name	accession	strain	length	is_primary_reference	citation_key
-stx2a_ref_1	stx2	stx2a	canonical	X07865	EDL933	1234	true	Scheutz2012
-stx2j_ref_1	stx2	stx2j	canonical	MZ229608	O33-5447	1234	true	Gill2022_Stx2j
-stx2k_ref_1	stx2	stx2k	canonical	MN200195	12GZSW01	1234	true	Hughes2020_Stx2k

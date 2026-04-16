@@ -1,4 +1,0 @@
-site_name	feature_type	match_gene	match_locus_tag	backbone_accession	backbone_label	category	note
-wrbA-like	CDS	wrbA		U00096.3	Ecoli_K12_MG1655	backbone_named_site	Common Stx phage insertion site
-argW-associated	tRNA	argW		U00096.3	Ecoli_K12_MG1655	trna_site	Common Stx phage insertion site
-sbcB-like	CDS	sbcB		U00096.3	Ecoli_K12_MG1655	backbone_named_site	Known Stx phage insertion site
