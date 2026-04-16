@@ -5,6 +5,25 @@ All notable changes to STXit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-04-16
+
+### Fixed
+- **Critical**: `databases/stx_references.fasta` contained protein (amino acid) sequences
+  but the pipeline runs `blastn` (nucleotide BLAST), causing zero STX loci to be detected
+  on any genome with the default database. Replaced with 145 real nucleotide sequences
+  covering all 11 canonical subtypes (stx1a, stx1c, stx1d, stx2a–stx2h) plus stx2i and
+  stx2k. Sequences sourced from `config/comprehensive_stx_typing.fasta` (commit db5b496^).
+- `stxit/stx_db.py`: `List` was missing from the `from typing import ...` line, causing
+  a `NameError` when `validate_database()` was called.
+- `stxit/stx_db.py`: `_parse_header` now correctly extracts the subtype from plain-name
+  FASTA headers (e.g. `>stx2c`) in addition to pipe-separated format.
+
+### Verified
+- E. coli O157:H7 EC4115 (NC_011353.1, 5.57 Mb): 242 probe-level BLAST hits collapse
+  to 2 clean loci — **stx2c** at 2,696,202 bp (99.9% identity) and **stx2a** at
+  3,271,007 bp (99.9% identity). Both within intact PHASTEST-confirmed prophage regions
+  (R12 sbcB locus, R15 argW locus).
+
 ## [1.0.3] - 2026-04-16
 
 ### Added

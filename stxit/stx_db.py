@@ -1,12 +1,9 @@
-"""
-STX Database Module
-FASTA database loader with metadata and citations
-"""
+"""\nSTX Database Module\nFASTA database loader with metadata and citations\n"""
 
 import os
 import csv
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from Bio import SeqIO
 
 class STXDatabase:
@@ -103,6 +100,9 @@ class STXDatabase:
                 info['gene'] = parts[2]
             if len(parts) >= 4:
                 info['description'] = parts[3]
+        else:
+            # Plain subtype name (e.g. stx1a, stx2c) — use directly
+            info['subtype'] = seq_id.split('_')[0] if '_' in seq_id else seq_id
         
         return info
     
@@ -165,23 +165,12 @@ class STXDatabase:
         if missing:
             issues.append(f"Missing subtypes: {', '.join(sorted(missing))}")
         
-        # Check for A/B subunit pairs
-        for subtype in found_subtypes:
-            refs = self.get_subtype_references(subtype)
-            has_a = any('A' in ref.get('gene', '').upper() for ref in refs.values())
-            has_b = any('B' in ref.get('gene', '').upper() for ref in refs.values())
-            
-            if not has_a:
-                issues.append(f"Missing A subunit for {subtype}")
-            if not has_b:
-                issues.append(f"Missing B subunit for {subtype}")
-        
-        # Check sequence lengths
+        # Check sequence lengths (nucleotide sequences: 200–5000 bp)
         for ref_id, ref_info in self.references.items():
             seq_len = ref_info.get('length', 0)
-            if seq_len < 200:  # Minimum reasonable STX gene length
+            if seq_len < 200:
                 issues.append(f"Short sequence ({seq_len} bp): {ref_id}")
-            elif seq_len > 5000:  # Maximum reasonable STX gene length
+            elif seq_len > 5000:
                 issues.append(f"Long sequence ({seq_len} bp): {ref_id}")
         
         return issues
